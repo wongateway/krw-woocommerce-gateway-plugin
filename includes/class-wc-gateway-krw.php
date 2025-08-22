@@ -1,0 +1,455 @@
+<?php
+/**
+ * WooCommerce KRW Payment Gateway
+ *
+ * @package WooCommerce_KRW_Gateway
+ */
+
+if (!defined('ABSPATH')) {
+    exit;
+}
+
+class WC_Gateway_KRW extends WC_Payment_Gateway {
+
+    public function __construct() {
+        $this->id                 = 'krw_gateway';
+        $this->icon               = '';
+        $this->has_fields         = true;
+        $this->method_title       = __('KRW Stablecoin', 'wc-krw-gateway');
+        $this->method_description = __('Accept KRW stablecoin payments - digital Korean Won cryptocurrency payments.', 'wc-krw-gateway');
+        $this->supports           = array(
+            'products',
+            'refunds',
+        );
+
+        $this->init_form_fields();
+        $this->init_settings();
+
+        $this->title              = $this->get_option('title');
+        $this->description        = $this->get_option('description');
+        $this->enabled            = $this->get_option('enabled');
+        $this->testmode           = 'yes' === $this->get_option('testmode');
+        $this->merchant_id        = $this->testmode ? $this->get_option('test_merchant_id') : $this->get_option('merchant_id');
+        $this->api_key            = $this->testmode ? $this->get_option('test_api_key') : $this->get_option('api_key');
+        $this->api_secret         = $this->testmode ? $this->get_option('test_api_secret') : $this->get_option('api_secret');
+
+        add_action('woocommerce_update_options_payment_gateways_' . $this->id, array($this, 'process_admin_options'));
+        add_action('woocommerce_api_wc_gateway_krw', array($this, 'webhook'));
+        add_action('wp_enqueue_scripts', array($this, 'payment_scripts'));
+        add_action('wp_ajax_krw_send_auth_code', array($this, 'ajax_send_auth_code'));
+        add_action('wp_ajax_nopriv_krw_send_auth_code', array($this, 'ajax_send_auth_code'));
+    }
+
+    public function is_available() {
+        // Force gateway to always be available for debugging
+        return true;
+    }
+
+    public function init_form_fields() {
+        $this->form_fields = array(
+            'enabled' => array(
+                'title'       => __('Enable/Disable', 'wc-krw-gateway'),
+                'label'       => __('Enable KRW Stablecoin Gateway', 'wc-krw-gateway'),
+                'type'        => 'checkbox',
+                'description' => '',
+                'default'     => 'yes',
+            ),
+            'title' => array(
+                'title'       => __('Title', 'wc-krw-gateway'),
+                'type'        => 'text',
+                'description' => __('This controls the title which the user sees during checkout.', 'wc-krw-gateway'),
+                'default'     => __('KRW Stablecoin', 'wc-krw-gateway'),
+                'desc_tip'    => true,
+            ),
+            'description' => array(
+                'title'       => __('Description', 'wc-krw-gateway'),
+                'type'        => 'textarea',
+                'description' => __('This controls the description which the user sees during checkout.', 'wc-krw-gateway'),
+                'default'     => __('Pay securely using KRW stablecoin digital currency.', 'wc-krw-gateway'),
+                'desc_tip'    => true,
+            ),
+            'testmode' => array(
+                'title'       => __('Test mode', 'wc-krw-gateway'),
+                'label'       => __('Enable Test Mode', 'wc-krw-gateway'),
+                'type'        => 'checkbox',
+                'description' => __('Place the payment gateway in test mode using test API keys.', 'wc-krw-gateway'),
+                'default'     => 'yes',
+                'desc_tip'    => true,
+            ),
+            // 'test_merchant_id' => array(
+            //     'title'       => __('Test Merchant ID', 'wc-krw-gateway'),
+            //     'type'        => 'text',
+            //     'description' => __('Enter your test merchant ID.', 'wc-krw-gateway'),
+            //     'default'     => '',
+            //     'desc_tip'    => true,
+            // ),
+            // 'test_api_key' => array(
+            //     'title'       => __('Test API Key', 'wc-krw-gateway'),
+            //     'type'        => 'password',
+            //     'description' => __('Enter your test API key.', 'wc-krw-gateway'),
+            //     'default'     => '',
+            //     'desc_tip'    => true,
+            // ),
+            // 'test_api_secret' => array(
+            //     'title'       => __('Test API Secret', 'wc-krw-gateway'),
+            //     'type'        => 'password',
+            //     'description' => __('Enter your test API secret.', 'wc-krw-gateway'),
+            //     'default'     => '',
+            //     'desc_tip'    => true,
+            // ),
+            // 'merchant_id' => array(
+            //     'title'       => __('Live Merchant ID', 'wc-krw-gateway'),
+            //     'type'        => 'text',
+            //     'description' => __('Enter your live merchant ID.', 'wc-krw-gateway'),
+            //     'default'     => '',
+            //     'desc_tip'    => true,
+            // ),
+            // 'api_key' => array(
+            //     'title'       => __('Live API Key', 'wc-krw-gateway'),
+            //     'type'        => 'password',
+            //     'description' => __('Enter your live API key.', 'wc-krw-gateway'),
+            //     'default'     => '',
+            //     'desc_tip'    => true,
+            // ),
+            // 'api_secret' => array(
+            //     'title'       => __('Live API Secret', 'wc-krw-gateway'),
+            //     'type'        => 'password',
+            //     'description' => __('Enter your live API secret.', 'wc-krw-gateway'),
+            //     'default'     => '',
+            //     'desc_tip'    => true,
+            // ),
+            // 'payment_method' => array(
+            //     'title'       => __('Payment Method', 'wc-krw-gateway'),
+            //     'type'        => 'select',
+            //     'description' => __('Select the payment method type.', 'wc-krw-gateway'),
+            //     'default'     => 'bank_transfer',
+            //     'desc_tip'    => true,
+            //     'options'     => array(
+            //         'bank_transfer'  => __('Bank Transfer', 'wc-krw-gateway'),
+            //         'credit_card'    => __('Credit Card', 'wc-krw-gateway'),
+            //         'mobile_payment' => __('Mobile Payment', 'wc-krw-gateway'),
+            //     ),
+            // ),
+            'debug' => array(
+                'title'       => __('Debug Log', 'wc-krw-gateway'),
+                'type'        => 'checkbox',
+                'label'       => __('Enable logging', 'wc-krw-gateway'),
+                'default'     => 'no',
+                'description' => sprintf(__('Log KRW payment events, such as API requests. You can check the logs in %s.', 'wc-krw-gateway'), '<code>' . WC_LOG_DIR . 'krw-' . date('Y-m-d') . '.log</code>'),
+            ),
+        );
+    }
+
+    public function payment_fields() {
+        ?>
+        <fieldset id="wc-<?php echo esc_attr($this->id); ?>-form" class="wc-payment-form">
+            <p><?php esc_html_e('You will complete the payment with your wallet after being redirected to Kaia Commerce.', 'wc-krw-gateway'); ?></p>
+        </fieldset>
+        <?php
+    }
+
+    public function validate_fields() {
+        // No validation needed for redirect-based payment
+        return true;
+    }
+
+    public function process_payment($order_id) {
+        $order = wc_get_order($order_id);
+        
+        $this->log('Processing payment for order ' . $order_id);
+
+        $payment_data = array(
+            'merchant_id'    => $this->merchant_id,
+            'order_id'       => $order_id,
+            'amount'         => $order->get_total(),
+            'currency'       => 'KRW',
+            'customer_name'  => sanitize_text_field($_POST['krw_payment_name']),
+            'payment_method' => $this->get_option('payment_method'),
+        );
+
+        if ($this->get_option('payment_method') === 'bank_transfer') {
+            $payment_data['bank_name'] = sanitize_text_field($_POST['krw_bank_name']);
+            $payment_data['account_number'] = sanitize_text_field($_POST['krw_account_number']);
+        } elseif ($this->get_option('payment_method') === 'mobile_payment') {
+            $payment_data['phone_number'] = sanitize_text_field($_POST['krw_phone_number']);
+            $payment_data['auth_code'] = sanitize_text_field($_POST['krw_auth_code']);
+        }
+
+        $response = $this->process_krw_payment($payment_data);
+
+        if ($response['success']) {
+            $order->add_order_note(sprintf(__('KRW payment successful. Transaction ID: %s', 'wc-krw-gateway'), $response['transaction_id']));
+            $order->payment_complete($response['transaction_id']);
+            
+            update_post_meta($order_id, '_krw_transaction_id', $response['transaction_id']);
+
+            WC()->cart->empty_cart();
+
+            return array(
+                'result'   => 'success',
+                'redirect' => $this->get_return_url($order),
+            );
+        } else {
+            wc_add_notice(__('Payment failed: ', 'wc-krw-gateway') . $response['message'], 'error');
+            $order->add_order_note(sprintf(__('KRW payment failed: %s', 'wc-krw-gateway'), $response['message']));
+            
+            return array(
+                'result'   => 'failure',
+                'redirect' => '',
+            );
+        }
+    }
+
+    private function process_krw_payment($payment_data) {
+        $this->log('Sending payment request: ' . print_r($payment_data, true));
+
+        if ($this->testmode) {
+            $transaction_id = 'TEST_' . uniqid();
+            
+            $this->log('Test mode - Simulating successful payment with transaction ID: ' . $transaction_id);
+            
+            return array(
+                'success' => true,
+                'transaction_id' => $transaction_id,
+            );
+        }
+
+        $api_endpoint = 'https://api.krwpayment.example.com/v1/process';
+        
+        $headers = array(
+            'Content-Type'  => 'application/json',
+            'Authorization' => 'Bearer ' . $this->api_key,
+            'X-API-Secret'  => $this->api_secret,
+        );
+
+        $response = wp_remote_post($api_endpoint, array(
+            'method'      => 'POST',
+            'headers'     => $headers,
+            'body'        => json_encode($payment_data),
+            'timeout'     => 60,
+            'redirection' => 5,
+            'httpversion' => '1.0',
+            'blocking'    => true,
+        ));
+
+        if (is_wp_error($response)) {
+            $error_message = $response->get_error_message();
+            $this->log('API request failed: ' . $error_message);
+            
+            return array(
+                'success' => false,
+                'message' => $error_message,
+            );
+        }
+
+        $body = wp_remote_retrieve_body($response);
+        $data = json_decode($body, true);
+
+        $this->log('API response: ' . print_r($data, true));
+
+        if (isset($data['status']) && $data['status'] === 'success') {
+            return array(
+                'success' => true,
+                'transaction_id' => $data['transaction_id'],
+            );
+        } else {
+            return array(
+                'success' => false,
+                'message' => isset($data['message']) ? $data['message'] : __('Unknown error occurred', 'wc-krw-gateway'),
+            );
+        }
+    }
+
+    public function process_refund($order_id, $amount = null, $reason = '') {
+        $order = wc_get_order($order_id);
+        $transaction_id = get_post_meta($order_id, '_krw_transaction_id', true);
+
+        if (!$transaction_id) {
+            return new WP_Error('error', __('Transaction ID not found', 'wc-krw-gateway'));
+        }
+
+        $this->log('Processing refund for order ' . $order_id . ', amount: ' . $amount);
+
+        if ($this->testmode) {
+            $refund_id = 'REFUND_' . uniqid();
+            $this->log('Test mode - Simulating successful refund with ID: ' . $refund_id);
+            
+            $order->add_order_note(sprintf(__('Refunded %s via KRW Gateway. Refund ID: %s', 'wc-krw-gateway'), wc_price($amount), $refund_id));
+            
+            return true;
+        }
+
+        $api_endpoint = 'https://api.krwpayment.example.com/v1/refund';
+        
+        $refund_data = array(
+            'merchant_id'    => $this->merchant_id,
+            'transaction_id' => $transaction_id,
+            'amount'         => $amount,
+            'currency'       => 'KRW',
+            'reason'         => $reason,
+        );
+
+        $headers = array(
+            'Content-Type'  => 'application/json',
+            'Authorization' => 'Bearer ' . $this->api_key,
+            'X-API-Secret'  => $this->api_secret,
+        );
+
+        $response = wp_remote_post($api_endpoint, array(
+            'method'      => 'POST',
+            'headers'     => $headers,
+            'body'        => json_encode($refund_data),
+            'timeout'     => 60,
+        ));
+
+        if (is_wp_error($response)) {
+            $error_message = $response->get_error_message();
+            $this->log('Refund API request failed: ' . $error_message);
+            return new WP_Error('error', $error_message);
+        }
+
+        $body = wp_remote_retrieve_body($response);
+        $data = json_decode($body, true);
+
+        $this->log('Refund API response: ' . print_r($data, true));
+
+        if (isset($data['status']) && $data['status'] === 'success') {
+            $order->add_order_note(sprintf(__('Refunded %s via KRW Gateway. Refund ID: %s', 'wc-krw-gateway'), wc_price($amount), $data['refund_id']));
+            return true;
+        } else {
+            $error_message = isset($data['message']) ? $data['message'] : __('Unknown error occurred', 'wc-krw-gateway');
+            return new WP_Error('error', $error_message);
+        }
+    }
+
+    public function webhook() {
+        $payload = file_get_contents('php://input');
+        $data = json_decode($payload, true);
+        
+        $this->log('Webhook received: ' . print_r($data, true));
+
+        if (!$this->validate_webhook($data)) {
+            $this->log('Webhook validation failed');
+            wp_die('Webhook validation failed', 'Webhook Error', array('response' => 401));
+        }
+
+        if (isset($data['event_type'])) {
+            switch ($data['event_type']) {
+                case 'payment_success':
+                    $this->handle_payment_success($data);
+                    break;
+                case 'payment_failed':
+                    $this->handle_payment_failed($data);
+                    break;
+                case 'refund_success':
+                    $this->handle_refund_success($data);
+                    break;
+                default:
+                    $this->log('Unknown webhook event type: ' . $data['event_type']);
+            }
+        }
+
+        wp_die('Webhook received', 'Success', array('response' => 200));
+    }
+
+    private function validate_webhook($data) {
+        if (!isset($data['signature'])) {
+            return false;
+        }
+
+        $expected_signature = hash_hmac('sha256', json_encode($data), $this->api_secret);
+        
+        return hash_equals($expected_signature, $data['signature']);
+    }
+
+    private function handle_payment_success($data) {
+        $order_id = $data['order_id'];
+        $order = wc_get_order($order_id);
+        
+        if ($order && $order->get_status() !== 'completed') {
+            $order->payment_complete($data['transaction_id']);
+            $order->add_order_note(sprintf(__('Payment confirmed via webhook. Transaction ID: %s', 'wc-krw-gateway'), $data['transaction_id']));
+        }
+    }
+
+    private function handle_payment_failed($data) {
+        $order_id = $data['order_id'];
+        $order = wc_get_order($order_id);
+        
+        if ($order) {
+            $order->update_status('failed', sprintf(__('Payment failed via webhook: %s', 'wc-krw-gateway'), $data['reason']));
+        }
+    }
+
+    private function handle_refund_success($data) {
+        $order_id = $data['order_id'];
+        $order = wc_get_order($order_id);
+        
+        if ($order) {
+            $order->add_order_note(sprintf(__('Refund confirmed via webhook. Refund ID: %s, Amount: %s', 'wc-krw-gateway'), $data['refund_id'], wc_price($data['amount'])));
+        }
+    }
+
+    private function log($message) {
+        if ('yes' === $this->debug) {
+            if (empty($this->logger)) {
+                $this->logger = wc_get_logger();
+            }
+            $this->logger->debug($message, array('source' => 'krw-gateway'));
+        }
+    }
+
+    public function payment_scripts() {
+        if (!is_checkout() || !$this->is_available()) {
+            return;
+        }
+
+        wp_enqueue_script(
+            'krw-gateway',
+            WC_KRW_GATEWAY_PLUGIN_URL . 'assets/js/krw-gateway.js',
+            array('jquery'),
+            WC_KRW_GATEWAY_VERSION,
+            true
+        );
+
+        wp_enqueue_style(
+            'krw-gateway',
+            WC_KRW_GATEWAY_PLUGIN_URL . 'assets/css/krw-gateway.css',
+            array(),
+            WC_KRW_GATEWAY_VERSION
+        );
+
+        wp_localize_script('krw-gateway', 'krw_gateway_params', array(
+            'ajax_url'          => admin_url('admin-ajax.php'),
+            'nonce'             => wp_create_nonce('krw-gateway'),
+            'i18n_invalid_phone' => __('Please enter a valid phone number.', 'wc-krw-gateway'),
+            'i18n_sending'      => __('Sending...', 'wc-krw-gateway'),
+            'i18n_send_code'    => __('Send Code', 'wc-krw-gateway'),
+            'i18n_resend_code'  => __('Resend Code', 'wc-krw-gateway'),
+            'i18n_code_sent'    => __('Authentication code has been sent to your phone.', 'wc-krw-gateway'),
+            'i18n_error'        => __('An error occurred. Please try again.', 'wc-krw-gateway'),
+        ));
+    }
+
+    public function ajax_send_auth_code() {
+        check_ajax_referer('krw-gateway', 'nonce');
+
+        $phone_number = isset($_POST['phone_number']) ? sanitize_text_field($_POST['phone_number']) : '';
+
+        if (empty($phone_number)) {
+            wp_send_json_error(array('message' => __('Phone number is required.', 'wc-krw-gateway')));
+        }
+
+        // In test mode, simulate sending auth code
+        if ($this->testmode) {
+            wp_send_json_success(array(
+                'message' => __('Test mode: Auth code would be sent to ', 'wc-krw-gateway') . $phone_number,
+                'code' => '123456' // For testing purposes only
+            ));
+        }
+
+        // Here you would integrate with actual SMS gateway
+        // For now, we'll simulate success
+        wp_send_json_success(array('message' => __('Authentication code sent successfully.', 'wc-krw-gateway')));
+    }
+}

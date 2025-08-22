@@ -1,0 +1,125 @@
+.wc-krw-gateway-form {
+    margin-top: 20px;
+}
+
+/* Make KRW Stablecoin label more prominent */
+input[type="radio"][value="krw_gateway"] + label {
+    font-size: 18px !important;
+    font-weight: bold !important;
+    color: #1a1a1a !important;
+}
+
+/* Alternative selector for different themes */
+label[for="payment_method_krw_gateway"] {
+    font-size: 18px !important;
+    font-weight: bold !important;
+    color: #1a1a1a !important;
+}
+
+#wc-krw_gateway-form fieldset {
+    background: #f9f9f9;
+    border: 1px solid #e0e0e0;
+    padding: 20px;
+    margin-bottom: 20px;
+    border-radius: 4px;
+}
+
+#wc-krw_gateway-form label {
+    font-weight: 600;
+    display: block;
+    margin-bottom: 8px;
+}
+
+#wc-krw_gateway-form input[type="text"],
+#wc-krw_gateway-form input[type="tel"],
+#wc-krw_gateway-form select {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+#wc-krw_gateway-form input[type="text"]:focus,
+#wc-krw_gateway-form input[type="tel"]:focus,
+#wc-krw_gateway-form select:focus {
+    border-color: #5b9dd9;
+    outline: none;
+    box-shadow: 0 0 0 1px #5b9dd9;
+}
+
+#krw-send-auth-code {
+    margin-top: 10px;
+    padding: 8px 16px;
+    background: #0073aa;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background 0.3s;
+}
+
+#krw-send-auth-code:hover:not(:disabled) {
+    background: #005a87;
+}
+
+#krw-send-auth-code:disabled {
+    background: #ccc;
+    cursor: not-allowed;
+}
+
+.krw-gateway-test-mode {
+    background: #fcf8e3;
+    border: 1px solid #faebcc;
+    color: #8a6d3b;
+    padding: 10px;
+    margin-bottom: 20px;
+    border-radius: 4px;
+}
+
+.krw-gateway-test-mode strong {
+    text-transform: uppercase;
+}
+
+.krw-gateway-icon {
+    display: inline-block;
+    width: 40px;
+    height: 25px;
+    margin-right: 10px;
+    vertical-align: middle;
+    background: url('../images/krw-icon.png') no-repeat center;
+    background-size: contain;
+}
+
+.krw-bank-logos {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.krw-bank-logo {
+    width: 60px;
+    height: 30px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 5px;
+    background: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    text-align: center;
+}
+
+@media (max-width: 768px) {
+    #wc-krw_gateway-form fieldset {
+        padding: 15px;
+    }
+    
+    #krw-send-auth-code {
+        width: 100%;
+        margin-top: 15px;
+    }
+}
