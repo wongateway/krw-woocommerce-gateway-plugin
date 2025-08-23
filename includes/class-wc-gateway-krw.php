@@ -175,13 +175,17 @@ class WC_Gateway_KRW extends WC_Payment_Gateway {
         if ($webhook_response['success']) {
             $this->log('Webhook sent successfully for order ' . $order_id);
             
-            // Add order note
-            $order->add_order_note(__('Invoice created in payment gateway. Awaiting payment.', 'wc-krw-gateway'));
+            // Mark order as "on-hold" to prevent reuse
+            $order->update_status('on-hold', __('Payment gateway invoice created. Customer redirected to complete payment.', 'wc-krw-gateway'));
             
-            // For now, return success (later we'll add redirect to payment gateway)
+            // Build redirect URL to payment gateway
+            $payment_url = 'http://localhost:3000/pay?orderId=' . urlencode($order->get_order_key());
+            
+            $this->log('Redirecting to payment gateway: ' . $payment_url);
+            
             return array(
                 'result'   => 'success',
-                'redirect' => $this->get_return_url($order),
+                'redirect' => $payment_url,
             );
         } else {
             $this->log('Webhook failed for order ' . $order_id . ': ' . $webhook_response['message']);

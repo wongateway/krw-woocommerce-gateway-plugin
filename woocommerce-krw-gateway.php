@@ -119,3 +119,55 @@ add_action('before_woocommerce_init', function() {
     }
 });
 
+// Add payment confirmation endpoint
+add_action('wp_ajax_nopriv_krw_payment_confirm', 'krw_payment_confirm_endpoint');
+add_action('wp_ajax_krw_payment_confirm', 'krw_payment_confirm_endpoint');
+
+function krw_payment_confirm_endpoint() {
+    // Log the request
+    error_log('KRW Payment Confirm Endpoint Called');
+    error_log('POST data: ' . print_r($_POST, true));
+    error_log('REQUEST data: ' . print_r($_REQUEST, true));
+    
+    // Get order key from request
+    $order_key = isset($_POST['order_key']) ? sanitize_text_field($_POST['order_key']) : '';
+    $transaction_id = isset($_POST['transaction_id']) ? sanitize_text_field($_POST['transaction_id']) : '';
+    
+    error_log('Order key: ' . $order_key);
+    error_log('Transaction ID: ' . $transaction_id);
+    
+    if (empty($order_key)) {
+        error_log('Error: Order key is empty');
+        wp_send_json_error(array('message' => 'Order key required'));
+    }
+    
+    // Find order by key
+    $order_id = wc_get_order_id_by_order_key($order_key);
+    error_log('Order ID found: ' . $order_id);
+    
+    if (!$order_id) {
+        error_log('Error: Order not found for key: ' . $order_key);
+        wp_send_json_error(array('message' => 'Order not found'));
+    }
+    
+    $order = wc_get_order($order_id);
+    if (!$order) {
+        error_log('Error: Invalid order ID: ' . $order_id);
+        wp_send_json_error(array('message' => 'Invalid order'));
+    }
+    
+    error_log('Order status before update: ' . $order->get_status());
+    
+    // Mark as paid and set to processing status
+    $order->payment_complete($transaction_id);
+    $order->update_status('processing', sprintf(__('Payment confirmed via KRW Stablecoin. Transaction ID: %s', 'wc-krw-gateway'), $transaction_id));
+    
+    error_log('Order status after update: ' . $order->get_status());
+    
+    wp_send_json_success(array(
+        'message' => 'Order marked as paid',
+        'order_id' => $order_id,
+        'status' => $order->get_status()
+    ));
+}
+
