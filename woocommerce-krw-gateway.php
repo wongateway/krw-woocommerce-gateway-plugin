@@ -113,6 +113,26 @@ function wc_krw_gateway_load_textdomain() {
     load_plugin_textdomain('wc-krw-gateway', false, dirname(plugin_basename(__FILE__)) . '/languages');
 }
 
+// Customize the Order Received page for KRW gateway
+add_filter('woocommerce_thankyou_order_received_text', 'krw_gateway_order_received_text', 10, 2);
+
+function krw_gateway_order_received_text($text, $order) {
+    if (!$order) {
+        return $text;
+    }
+    
+    // Check if order was paid with KRW gateway
+    if ($order->get_payment_method() === 'krw_gateway') {
+        if ($order->get_status() === 'processing') {
+            $text = __('Thank you! Your KRW Stablecoin payment has been received and confirmed. Your order is now being processed.', 'wc-krw-gateway');
+        } elseif ($order->get_status() === 'on-hold') {
+            $text = __('Thank you for your order. Please complete your KRW Stablecoin payment to proceed.', 'wc-krw-gateway');
+        }
+    }
+    
+    return $text;
+}
+
 add_action('before_woocommerce_init', function() {
     if (class_exists(\Automattic\WooCommerce\Utilities\FeaturesUtil::class)) {
         \Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility('custom_order_tables', __FILE__, true);
@@ -128,10 +148,22 @@ function krw_payment_confirm_endpoint() {
     error_log('KRW Payment Confirm Endpoint Called');
     error_log('POST data: ' . print_r($_POST, true));
     error_log('REQUEST data: ' . print_r($_REQUEST, true));
+    error_log('Raw input: ' . file_get_contents('php://input'));
+    error_log('Content-Type: ' . $_SERVER['CONTENT_TYPE']);
     
-    // Get order key from request
-    $order_key = isset($_POST['order_key']) ? sanitize_text_field($_POST['order_key']) : '';
-    $transaction_id = isset($_POST['transaction_id']) ? sanitize_text_field($_POST['transaction_id']) : '';
+    // Check if JSON request
+    $input = file_get_contents('php://input');
+    $json_data = json_decode($input, true);
+    
+    if ($json_data) {
+        error_log('JSON data received: ' . print_r($json_data, true));
+        $order_key = isset($json_data['order_key']) ? sanitize_text_field($json_data['order_key']) : '';
+        $transaction_id = isset($json_data['transaction_id']) ? sanitize_text_field($json_data['transaction_id']) : '';
+    } else {
+        // Get order key from POST request
+        $order_key = isset($_POST['order_key']) ? sanitize_text_field($_POST['order_key']) : '';
+        $transaction_id = isset($_POST['transaction_id']) ? sanitize_text_field($_POST['transaction_id']) : '';
+    }
     
     error_log('Order key: ' . $order_key);
     error_log('Transaction ID: ' . $transaction_id);
