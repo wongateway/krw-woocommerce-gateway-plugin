@@ -158,40 +158,34 @@ class WC_Gateway_KRW extends WC_Payment_Gateway {
         
         $this->log('Processing payment for order ' . $order_id);
 
-        $payment_data = array(
-            'merchant_id'    => $this->merchant_id,
-            'order_id'       => $order_id,
-            'amount'         => $order->get_total(),
-            'currency'       => 'KRW',
-            'customer_name'  => sanitize_text_field($_POST['krw_payment_name']),
-            'payment_method' => $this->get_option('payment_method'),
+        // Prepare webhook data
+        $webhook_data = array(
+            'order_id'      => $order_id,
+            'order_key'     => $order->get_order_key(),
+            'store_name'    => get_bloginfo('name'),
+            'email'         => $order->get_billing_email(),
+            'total'         => $order->get_total(),
+            'currency_code' => $order->get_currency(),
+            'product_name'  => $this->get_order_product_names($order),
         );
 
-        if ($this->get_option('payment_method') === 'bank_transfer') {
-            $payment_data['bank_name'] = sanitize_text_field($_POST['krw_bank_name']);
-            $payment_data['account_number'] = sanitize_text_field($_POST['krw_account_number']);
-        } elseif ($this->get_option('payment_method') === 'mobile_payment') {
-            $payment_data['phone_number'] = sanitize_text_field($_POST['krw_phone_number']);
-            $payment_data['auth_code'] = sanitize_text_field($_POST['krw_auth_code']);
-        }
+        // Send webhook to payment gateway DB
+        $webhook_response = $this->send_webhook($webhook_data);
 
-        $response = $this->process_krw_payment($payment_data);
-
-        if ($response['success']) {
-            $order->add_order_note(sprintf(__('KRW payment successful. Transaction ID: %s', 'wc-krw-gateway'), $response['transaction_id']));
-            $order->payment_complete($response['transaction_id']);
+        if ($webhook_response['success']) {
+            $this->log('Webhook sent successfully for order ' . $order_id);
             
-            update_post_meta($order_id, '_krw_transaction_id', $response['transaction_id']);
-
-            WC()->cart->empty_cart();
-
+            // Add order note
+            $order->add_order_note(__('Invoice created in payment gateway. Awaiting payment.', 'wc-krw-gateway'));
+            
+            // For now, return success (later we'll add redirect to payment gateway)
             return array(
                 'result'   => 'success',
                 'redirect' => $this->get_return_url($order),
             );
         } else {
-            wc_add_notice(__('Payment failed: ', 'wc-krw-gateway') . $response['message'], 'error');
-            $order->add_order_note(sprintf(__('KRW payment failed: %s', 'wc-krw-gateway'), $response['message']));
+            $this->log('Webhook failed for order ' . $order_id . ': ' . $webhook_response['message']);
+            wc_add_notice(__('Payment setup failed: ', 'wc-krw-gateway') . $webhook_response['message'], 'error');
             
             return array(
                 'result'   => 'failure',
@@ -387,6 +381,61 @@ class WC_Gateway_KRW extends WC_Payment_Gateway {
         
         if ($order) {
             $order->add_order_note(sprintf(__('Refund confirmed via webhook. Refund ID: %s, Amount: %s', 'wc-krw-gateway'), $data['refund_id'], wc_price($data['amount'])));
+        }
+    }
+
+    private function get_order_product_names($order) {
+        $product_names = array();
+        
+        foreach ($order->get_items() as $item) {
+            $product_names[] = $item->get_name();
+        }
+        
+        return implode(', ', $product_names);
+    }
+
+    private function send_webhook($webhook_data) {
+        $webhook_url = 'http://localhost:3000/api/webhooks/woocommerce';
+        
+        $this->log('Sending webhook to: ' . $webhook_url);
+        $this->log('Webhook data: ' . print_r($webhook_data, true));
+
+        $response = wp_remote_post($webhook_url, array(
+            'method'      => 'POST',
+            'headers'     => array(
+                'Content-Type' => 'application/json',
+            ),
+            'body'        => json_encode($webhook_data),
+            'timeout'     => 30,
+            'blocking'    => true,
+        ));
+
+        if (is_wp_error($response)) {
+            $error_message = $response->get_error_message();
+            $this->log('Webhook request failed: ' . $error_message);
+            
+            return array(
+                'success' => false,
+                'message' => $error_message,
+            );
+        }
+
+        $response_code = wp_remote_retrieve_response_code($response);
+        $response_body = wp_remote_retrieve_body($response);
+        
+        $this->log('Webhook response code: ' . $response_code);
+        $this->log('Webhook response body: ' . $response_body);
+
+        if ($response_code >= 200 && $response_code < 300) {
+            return array(
+                'success' => true,
+                'response' => json_decode($response_body, true),
+            );
+        } else {
+            return array(
+                'success' => false,
+                'message' => 'HTTP ' . $response_code . ': ' . $response_body,
+            );
         }
     }
 
