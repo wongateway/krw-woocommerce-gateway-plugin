@@ -29,9 +29,9 @@ class WC_Gateway_KRW extends WC_Payment_Gateway {
         $this->description        = $this->get_option('description');
         $this->enabled            = $this->get_option('enabled');
         $this->testmode           = 'yes' === $this->get_option('testmode');
-        $this->merchant_id        = $this->testmode ? $this->get_option('test_merchant_id') : $this->get_option('merchant_id');
-        $this->api_key            = $this->testmode ? $this->get_option('test_api_key') : $this->get_option('api_key');
-        $this->api_secret         = $this->testmode ? $this->get_option('test_api_secret') : $this->get_option('api_secret');
+        $this->api_key            = $this->get_option('api_key');
+        $this->merchant_id        = '';
+        $this->api_secret         = '';
 
         add_action('woocommerce_update_options_payment_gateways_' . $this->id, array($this, 'process_admin_options'));
         add_action('woocommerce_api_wc_gateway_krw', array($this, 'webhook'));
@@ -75,6 +75,14 @@ class WC_Gateway_KRW extends WC_Payment_Gateway {
                 'description' => __('Place the payment gateway in test mode using test API keys.', 'wc-krw-gateway'),
                 'default'     => 'yes',
                 'desc_tip'    => true,
+            ),
+            'api_key' => array(
+                'title'       => __('API Key', 'wc-krw-gateway'),
+                'type'        => 'password',
+                'description' => __('Enter your KRW payment gateway API key.', 'wc-krw-gateway'),
+                'default'     => '',
+                'desc_tip'    => true,
+                'placeholder' => __('Enter your API key here', 'wc-krw-gateway'),
             ),
             // 'test_merchant_id' => array(
             //     'title'       => __('Test Merchant ID', 'wc-krw-gateway'),
@@ -167,6 +175,7 @@ class WC_Gateway_KRW extends WC_Payment_Gateway {
             'total'         => $order->get_total(),
             'currency_code' => $order->get_currency(),
             'product_name'  => $this->get_order_product_names($order),
+            'api_key'       => $this->api_key,
         );
 
         // Send webhook to payment gateway DB

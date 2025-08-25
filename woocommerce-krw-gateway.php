@@ -159,14 +159,25 @@ function krw_payment_confirm_endpoint() {
         error_log('JSON data received: ' . print_r($json_data, true));
         $order_key = isset($json_data['order_key']) ? sanitize_text_field($json_data['order_key']) : '';
         $transaction_id = isset($json_data['transaction_id']) ? sanitize_text_field($json_data['transaction_id']) : '';
+        $api_key = isset($json_data['api_key']) ? sanitize_text_field($json_data['api_key']) : '';
     } else {
         // Get order key from POST request
         $order_key = isset($_POST['order_key']) ? sanitize_text_field($_POST['order_key']) : '';
         $transaction_id = isset($_POST['transaction_id']) ? sanitize_text_field($_POST['transaction_id']) : '';
+        $api_key = isset($_POST['api_key']) ? sanitize_text_field($_POST['api_key']) : '';
     }
     
     error_log('Order key: ' . $order_key);
     error_log('Transaction ID: ' . $transaction_id);
+    
+    // Validate API key
+    $gateway_settings = get_option('woocommerce_krw_gateway_settings', array());
+    $configured_api_key = isset($gateway_settings['api_key']) ? $gateway_settings['api_key'] : '';
+    
+    if (empty($api_key) || $api_key !== $configured_api_key) {
+        error_log('Error: Invalid or missing API key');
+        wp_send_json_error(array('message' => 'Invalid API key'));
+    }
     
     if (empty($order_key)) {
         error_log('Error: Order key is empty');
