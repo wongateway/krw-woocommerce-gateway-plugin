@@ -143,6 +143,10 @@ add_action('before_woocommerce_init', function() {
 add_action('wp_ajax_nopriv_krw_payment_confirm', 'krw_payment_confirm_endpoint');
 add_action('wp_ajax_krw_payment_confirm', 'krw_payment_confirm_endpoint');
 
+// Add auth verification endpoint (GET request)
+add_action('wp_ajax_nopriv_krw_auth_verify', 'krw_auth_verify_endpoint');
+add_action('wp_ajax_krw_auth_verify', 'krw_auth_verify_endpoint');
+
 function krw_payment_confirm_endpoint() {
     // Log the request
     error_log('KRW Payment Confirm Endpoint Called');
@@ -165,6 +169,16 @@ function krw_payment_confirm_endpoint() {
         $order_key = isset($_POST['order_key']) ? sanitize_text_field($_POST['order_key']) : '';
         $transaction_id = isset($_POST['transaction_id']) ? sanitize_text_field($_POST['transaction_id']) : '';
         $api_key = isset($_POST['api_key']) ? sanitize_text_field($_POST['api_key']) : '';
+    }
+    
+    // Also check for API key in headers (preferred method)
+    $headers = getallheaders();
+    $header_api_key = isset($headers['X-API-Key']) ? $headers['X-API-Key'] : (isset($headers['x-api-key']) ? $headers['x-api-key'] : '');
+    
+    // Use header API key if provided, otherwise fall back to body parameter
+    if ($header_api_key) {
+        $api_key = $header_api_key;
+        error_log('Using API key from header');
     }
     
     error_log('Order key: ' . $order_key);
@@ -210,7 +224,105 @@ function krw_payment_confirm_endpoint() {
     wp_send_json_success(array(
         'message' => 'Order marked as paid',
         'order_id' => $order_id,
-        'status' => $order->get_status()
+        'status' => $order->get_status(),
+        'site_url' => get_site_url()
+    ));
+}
+
+function krw_auth_verify_endpoint() {
+    // Log the request
+    error_log('KRW Auth Verify Endpoint Called');
+    error_log('GET data: ' . print_r($_GET, true));
+    error_log('Headers: ' . print_r(getallheaders(), true));
+    
+    // Get the gateway settings
+    $gateway_settings = get_option('woocommerce_krw_gateway_settings', array());
+    $configured_api_key = isset($gateway_settings['api_key']) ? $gateway_settings['api_key'] : '';
+    
+    // Get store information
+    $store_name = get_bloginfo('name');
+    $site_url = get_site_url();
+    
+    // Check if this is an external API calling us (vice versa mode)
+    $request_api_key = isset($_GET['api_key']) ? sanitize_text_field($_GET['api_key']) : '';
+    $headers = getallheaders();
+    $header_api_key = isset($headers['X-API-Key']) ? $headers['X-API-Key'] : (isset($headers['x-api-key']) ? $headers['x-api-key'] : '');
+    
+    // If external API is calling us with an API key, verify and return info
+    if ($request_api_key || $header_api_key) {
+        $provided_key = $request_api_key ?: $header_api_key;
+        
+        // Verify the provided API key matches our configured one
+        if ($provided_key !== $configured_api_key) {
+            error_log('Invalid API key provided: ' . $provided_key);
+            wp_send_json_error(array(
+                'message' => 'Invalid API key',
+                'authenticated' => false
+            ));
+            return;
+        }
+        
+        // Return store information to the external API
+        error_log('External API authenticated successfully');
+        wp_send_json_success(array(
+            'authenticated' => true,
+            'store_name' => $store_name,
+            'site_url' => $site_url,
+            'webhook_url' => admin_url('admin-ajax.php') . '?action=krw_payment_confirm',
+            'plugin_version' => WC_KRW_GATEWAY_VERSION,
+            'woocommerce_version' => WC()->version,
+            'wordpress_version' => get_bloginfo('version')
+        ));
+        return;
+    }
+    
+    // Otherwise, this is the gateway calling out to external API
+    // Prepare auth data to send to external API
+    $auth_data = array(
+        'api_key' => $configured_api_key,
+        'store_name' => $store_name,
+        'site_url' => $site_url,
+        'webhook_url' => admin_url('admin-ajax.php') . '?action=krw_payment_confirm'
+    );
+    
+    // Send auth request to external API
+    $external_api_url = 'http://localhost:3000/api/webhooks/woocommerce/auth';
+    
+    error_log('Sending auth request to: ' . $external_api_url);
+    error_log('Auth data: ' . print_r($auth_data, true));
+    
+    $response = wp_remote_get($external_api_url, array(
+        'headers' => array(
+            'X-API-Key' => $configured_api_key,
+            'X-Store-Name' => $store_name,
+            'X-Site-URL' => $site_url,
+        ),
+        'timeout' => 30,
+    ));
+    
+    if (is_wp_error($response)) {
+        $error_message = $response->get_error_message();
+        error_log('Auth API request failed: ' . $error_message);
+        wp_send_json_error(array(
+            'message' => 'Failed to authenticate with external service',
+            'error' => $error_message
+        ));
+        return;
+    }
+    
+    $body = wp_remote_retrieve_body($response);
+    $response_code = wp_remote_retrieve_response_code($response);
+    
+    error_log('Auth API response code: ' . $response_code);
+    error_log('Auth API response body: ' . $body);
+    
+    // Return the auth information and external API response
+    wp_send_json_success(array(
+        'api_key' => $configured_api_key,
+        'store_name' => $store_name,
+        'site_url' => $site_url,
+        'webhook_url' => admin_url('admin-ajax.php') . '?action=krw_payment_confirm',
+        'external_api_response' => json_decode($body, true)
     ));
 }
 

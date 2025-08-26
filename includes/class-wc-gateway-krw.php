@@ -78,8 +78,8 @@ class WC_Gateway_KRW extends WC_Payment_Gateway {
             ),
             'api_key' => array(
                 'title'       => __('API Key', 'wc-krw-gateway'),
-                'type'        => 'password',
-                'description' => __('Enter your KRW payment gateway API key.', 'wc-krw-gateway'),
+                'type'        => 'api_key_with_connect',
+                'description' => __('Enter your KRW payment gateway API key and click Connect to verify.', 'wc-krw-gateway'),
                 'default'     => '',
                 'desc_tip'    => true,
                 'placeholder' => __('Enter your API key here', 'wc-krw-gateway'),
@@ -146,6 +146,91 @@ class WC_Gateway_KRW extends WC_Payment_Gateway {
                 'description' => sprintf(__('Log KRW payment events, such as API requests. You can check the logs in %s.', 'wc-krw-gateway'), '<code>' . WC_LOG_DIR . 'krw-' . date('Y-m-d') . '.log</code>'),
             ),
         );
+    }
+
+    public function generate_api_key_with_connect_html($key, $data) {
+        $field_key = $this->get_field_key($key);
+        $defaults = array(
+            'title'       => '',
+            'class'       => '',
+            'css'         => '',
+            'placeholder' => '',
+            'type'        => 'password',
+            'desc_tip'    => false,
+            'description' => '',
+            'custom_attributes' => array(),
+        );
+
+        $data = wp_parse_args($data, $defaults);
+
+        ob_start();
+        ?>
+        <tr valign="top">
+            <th scope="row" class="titledesc">
+                <label for="<?php echo esc_attr($field_key); ?>"><?php echo wp_kses_post($data['title']); ?></label>
+                <?php echo $this->get_tooltip_html($data); ?>
+            </th>
+            <td class="forminp">
+                <fieldset>
+                    <legend class="screen-reader-text"><span><?php echo wp_kses_post($data['title']); ?></span></legend>
+                    <input class="input-text regular-input <?php echo esc_attr($data['class']); ?>" 
+                           type="password" 
+                           name="<?php echo esc_attr($field_key); ?>" 
+                           id="<?php echo esc_attr($field_key); ?>" 
+                           style="<?php echo esc_attr($data['css']); ?>" 
+                           value="<?php echo esc_attr($this->get_option($key)); ?>" 
+                           placeholder="<?php echo esc_attr($data['placeholder']); ?>" 
+                           <?php echo $this->get_custom_attribute_html($data); ?> />
+                    <button type="button" class="button button-secondary" id="krw_connect_button" style="margin-left: 10px;">
+                        <?php esc_html_e('Connect', 'wc-krw-gateway'); ?>
+                    </button>
+                    <span id="krw_connect_status" style="margin-left: 10px;"></span>
+                    <?php echo $this->get_description_html($data); ?>
+                </fieldset>
+                <script type="text/javascript">
+                    jQuery(document).ready(function($) {
+                        $('#krw_connect_button').on('click', function(e) {
+                            e.preventDefault();
+                            
+                            var button = $(this);
+                            var statusSpan = $('#krw_connect_status');
+                            var apiKey = $('#<?php echo esc_js($field_key); ?>').val();
+                            
+                            if (!apiKey) {
+                                alert('<?php esc_html_e('Please enter an API key first.', 'wc-krw-gateway'); ?>');
+                                return;
+                            }
+                            
+                            button.prop('disabled', true);
+                            statusSpan.html('<span style="color: #666;">Connecting...</span>');
+                            
+                            $.ajax({
+                                url: '<?php echo admin_url('admin-ajax.php'); ?>',
+                                type: 'GET',
+                                data: {
+                                    action: 'krw_auth_verify'
+                                },
+                                success: function(response) {
+                                    button.prop('disabled', false);
+                                    if (response.success) {
+                                        statusSpan.html('<span style="color: green;">✓ Connected successfully!</span>');
+                                        console.log('Auth response:', response.data);
+                                    } else {
+                                        statusSpan.html('<span style="color: red;">✗ Connection failed: ' + (response.data.message || 'Unknown error') + '</span>');
+                                    }
+                                },
+                                error: function() {
+                                    button.prop('disabled', false);
+                                    statusSpan.html('<span style="color: red;">✗ Connection error. Please check your settings.</span>');
+                                }
+                            });
+                        });
+                    });
+                </script>
+            </td>
+        </tr>
+        <?php
+        return ob_get_clean();
     }
 
     public function payment_fields() {
