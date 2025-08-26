@@ -212,11 +212,24 @@ class WC_Gateway_KRW extends WC_Payment_Gateway {
                                 },
                                 success: function(response) {
                                     button.prop('disabled', false);
-                                    if (response.success) {
-                                        statusSpan.html('<span style="color: green;">✓ Connected successfully!</span>');
+                                    if (response.success && response.data.external_api_response) {
+                                        var externalResponse = response.data.external_api_response;
+                                        
+                                        // Check if external API returned false or error about API key
+                                        if (externalResponse === false || 
+                                            (externalResponse && externalResponse.error && 
+                                             (externalResponse.error.toLowerCase().includes('api key') || 
+                                              externalResponse.error.toLowerCase().includes('required')))) {
+                                            statusSpan.html('<span style="color: red;">✗ Invalid API key</span>');
+                                        } else if (externalResponse && externalResponse.success) {
+                                            statusSpan.html('<span style="color: green;">✓ Connected successfully!</span>');
+                                        } else {
+                                            statusSpan.html('<span style="color: red;">✗ Connection failed</span>');
+                                        }
+                                        
                                         console.log('Auth response:', response.data);
                                     } else {
-                                        statusSpan.html('<span style="color: red;">✗ Connection failed: ' + (response.data.message || 'Unknown error') + '</span>');
+                                        statusSpan.html('<span style="color: red;">✗ Invalid API key</span>');
                                     }
                                 },
                                 error: function() {
@@ -273,7 +286,7 @@ class WC_Gateway_KRW extends WC_Payment_Gateway {
             $order->update_status('on-hold', __('Payment gateway invoice created. Customer redirected to complete payment.', 'wc-krw-gateway'));
             
             // Build redirect URL to payment gateway
-            $payment_url = 'http://localhost:3000/pay?orderId=' . urlencode($order->get_order_key());
+            $payment_url = 'https://kaia-commerce.vercel.app/pay?orderId=' . urlencode($order->get_order_key());
             
             $this->log('Redirecting to payment gateway: ' . $payment_url);
             
@@ -493,7 +506,7 @@ class WC_Gateway_KRW extends WC_Payment_Gateway {
     }
 
     private function send_webhook($webhook_data) {
-        $webhook_url = 'http://localhost:3000/api/webhooks/woocommerce';
+        $webhook_url = 'https://kaia-commerce.vercel.app/api/webhooks/woocommerce';
         
         $this->log('Sending webhook to: ' . $webhook_url);
         $this->log('Webhook data: ' . print_r($webhook_data, true));

@@ -286,7 +286,7 @@ function krw_auth_verify_endpoint() {
     );
     
     // Send auth request to external API
-    $external_api_url = 'http://localhost:3000/api/webhooks/woocommerce/auth';
+    $external_api_url = 'https://kaia-commerce.vercel.app/api/webhooks/woocommerce/auth';
     
     error_log('Sending auth request to: ' . $external_api_url);
     error_log('Auth data: ' . print_r($auth_data, true));
