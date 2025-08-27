@@ -286,7 +286,7 @@ class WC_Gateway_KRW extends WC_Payment_Gateway {
             $order->update_status('on-hold', __('Payment gateway invoice created. Customer redirected to complete payment.', 'wc-krw-gateway'));
             
             // Build redirect URL to payment gateway
-            $payment_url = 'https://kaia-commerce.vercel.app/pay?orderId=' . urlencode($order->get_order_key());
+            $payment_url = 'https://wonway.xyz/pay?orderId=' . urlencode($order->get_order_key());
             
             $this->log('Redirecting to payment gateway: ' . $payment_url);
             
@@ -506,7 +506,7 @@ class WC_Gateway_KRW extends WC_Payment_Gateway {
     }
 
     private function send_webhook($webhook_data) {
-        $webhook_url = 'https://kaia-commerce.vercel.app/api/webhooks/woocommerce';
+        $webhook_url = 'https://wonway.xyz/api/webhooks/woocommerce';
         
         $this->log('Sending webhook to: ' . $webhook_url);
         $this->log('Webhook data: ' . print_r($webhook_data, true));
