@@ -5,7 +5,7 @@
  * Description: Accept KRW stablecoin payments in WooCommerce - supporting Korean Won digital currency transactions
  * Version: 1.0.0
  * Author: Nick Mura
- * Author URI: https://example.com
+ * Author URI: https://wonway.xyz
  * Text Domain: wc-krw-gateway
  * Domain Path: /languages
  * Requires at least: 5.8
